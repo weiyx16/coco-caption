@@ -14,11 +14,28 @@ class COCOEvalCap:
         self.imgToEval = dict()
         self.coco = coco
         self.cocoRes = cocoRes
-        self.params = {'image_id': coco.getImgIds()}
+        try:
+            self.params = {'image_id': coco.getImgIds()}
+        except:
+            pass
 
         self.gts = None
         self.res = None
         self.df = df
+
+    def puretext_tokenize(self):
+        gts = dict()
+        res = dict()
+        for textId in range(len(self.coco)):
+            gts[textId] = [{"caption": self.coco[textId]}]
+            res[textId] = [{"caption": self.cocoRes[textId]}]
+        # =================================================
+        # Set up scorers
+        # =================================================
+        print('tokenization...')
+        tokenizer = PTBTokenizer()
+        self.gts  = tokenizer.tokenize(gts)
+        self.res = tokenizer.tokenize(res)
 
     def tokenize(self):
         imgIds = self.params['image_id']
@@ -36,6 +53,35 @@ class COCOEvalCap:
         tokenizer = PTBTokenizer()
         self.gts  = tokenizer.tokenize(gts)
         self.res = tokenizer.tokenize(res)
+
+    def puretext_evaluate(self):
+        self.puretext_tokenize()
+
+        # =================================================
+        # Set up scorers
+        # =================================================
+        print('setting up scorers...')
+        scorers = [
+            (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+            (Meteor(),"METEOR"),
+            (Rouge(), "ROUGE_L"),
+            (Cider(self.df), "CIDEr"),
+            (Spice(), "SPICE")
+        ]
+
+        # =================================================
+        # Compute scores
+        # =================================================
+        for scorer, method in scorers:
+            print('computing %s score...'%(scorer.method()))
+            score, scores = scorer.compute_score(self.gts, self.res)
+            if type(method) == list:
+                for sc, scs, m in zip(score, scores, method):
+                    self.setEval(sc, m)
+                    print("%s: %0.3f"%(m, sc))
+            else:
+                self.setEval(score, method)
+                print("%s: %0.3f"%(method, score))
 
     def evaluate(self):
         self.tokenize()
